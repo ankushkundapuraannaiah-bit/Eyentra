@@ -1,4 +1,4 @@
-# PhotoShare — Secure Photo Sharing with QR Codes
+# Eyentra — Secure Photo Sharing with QR Codes
 
 A Python + Flask web application that lets users:
 
@@ -12,10 +12,10 @@ A Python + Flask web application that lets users:
 ## Project structure
 
 ```
-photoshare/
+eyentra/
 ├── app.py                  ← Main Flask application (all routes + models)
 ├── requirements.txt        ← Python dependencies
-├── photoshare.db           ← SQLite database (auto-created on first run)
+├── eyentra.db           ← SQLite database (auto-created on first run)
 ├── static/
 │   ├── css/style.css       ← Stylesheet
 │   ├── uploads/            ← Uploaded photos (auto-created)
@@ -53,48 +53,6 @@ python app.py
 ```
 http://127.0.0.1:5000
 ```
-
-
-## Deploy on Vercel
-
-This repository now includes Vercel-ready files at the project root:
-
-- `vercel.json`
-- `requirements.txt`
-- `api/index.py`
-
-The production app uses a web database through `DATABASE_URL` or `POSTGRES_URL`.
-Use Vercel Postgres, Neon, Supabase Postgres, or any hosted PostgreSQL database.
-
-### Required Vercel environment variables
-
-Set these in Vercel Project Settings -> Environment Variables:
-
-```text
-DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DATABASE
-SECRET_KEY=use-a-long-random-secret
-TWILIO_ACCOUNT_SID=your_twilio_account_sid
-TWILIO_AUTH_TOKEN=your_twilio_auth_token
-TWILIO_FROM_NUMBER=+1234567890
-```
-
-If Vercel gives you `POSTGRES_URL` instead of `DATABASE_URL`, the app will use it automatically.
-
-### Important production changes
-
-- SQLite is only used for local development.
-- Uploaded images are stored in the database as binary data.
-- QR codes are stored in the database as binary data.
-- Viewer analytics charts are generated on demand, not saved permanently to disk.
-- Local folders under `photoshare/static/uploads`, `qrcodes`, and `analytics` are ignored by Git.
-
-### Deploy flow
-
-1. Push this project to `ankushkundapuraannaiah-bit/Eyentra`.
-2. Import the GitHub repo in Vercel.
-3. Keep the Vercel project root as the repository root.
-4. Add the environment variables above.
-5. Deploy.
 
 
 ## OTP (SMS) during development

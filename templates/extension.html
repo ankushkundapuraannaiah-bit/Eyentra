@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Browser Extension - Eyentra{% endblock %}
+
+{% block content %}
+<section class="page-hero compact">
+    <p class="eyebrow">Browser capture</p>
+    <h1>Install the local Eyentra screenshot extension.</h1>
+    <p>
+        Click the extension icon, drag over the visible browser area, and the crop is
+        uploaded to your logged-in Eyentra account with a QR code ready to share.
+    </p>
+</section>
+
+<section class="split-panel">
+    <div class="info-box">
+        <h2>Install in Chrome or Edge</h2>
+        <ol class="ordered-list">
+            <li>Keep Eyentra running at <code>http://127.0.0.1:5000</code>.</li>
+            <li>Log in to your Eyentra account in the browser.</li>
+            <li>Open <code>chrome://extensions</code> or <code>edge://extensions</code>.</li>
+            <li>Enable Developer mode.</li>
+            <li>Choose Load unpacked and select <code>photoshare/extension</code>.</li>
+        </ol>
+    </div>
+    <div class="info-box accent-box">
+        <h2>How capture works</h2>
+        <p>
+            The extension uses the browser screenshot API for the current tab, crops only
+            your selected rectangle, then posts the image to Eyentra's Python API.
+        </p>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-primary">Open Dashboard</a>
+    </div>
+</section>
+{% endblock %}
