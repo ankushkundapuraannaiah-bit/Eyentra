@@ -7,17 +7,15 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
+
+<!-- ── Navigation bar ── -->
 <nav class="navbar">
-    <a href="{{ url_for('index') }}" class="brand">
-        <span class="brand-mark">E</span>
-        <span>Eyentra</span>
-    </a>
+    <a href="{{ url_for('index') }}" class="brand">📷 Eyentra</a>
     <div class="nav-links">
-        <a href="{{ url_for('extension_guide') }}">Extension</a>
         {% if user %}
-            <span class="nav-mobile">{{ user.mobile }}</span>
+            <span class="nav-mobile">📱 {{ user.mobile }}</span>
             <a href="{{ url_for('dashboard') }}">Dashboard</a>
-            <a href="{{ url_for('upload_photo') }}" class="btn-small">Upload</a>
+            <a href="{{ url_for('upload_photo') }}" class="btn-small">+ Upload</a>
             <a href="{{ url_for('logout') }}">Logout</a>
         {% else %}
             <a href="{{ url_for('login') }}">Login</a>
@@ -26,22 +24,22 @@
     </div>
 </nav>
 
-<main class="container">
+<!-- ── Flash messages ── -->
+<div class="container">
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-            <div class="flash-stack">
             {% for category, message in messages %}
                 <div class="alert alert-{{ category }}">{{ message }}</div>
             {% endfor %}
-            </div>
         {% endif %}
     {% endwith %}
 
     {% block content %}{% endblock %}
-</main>
+</div>
 
 <footer class="footer">
-    <p>Eyentra keeps visual proof private until a QR password opens the door.</p>
+    <p>Eyentra &copy; {{ now.year if now else 2026 }} — Share photos securely with QR codes</p>
 </footer>
+
 </body>
 </html>
