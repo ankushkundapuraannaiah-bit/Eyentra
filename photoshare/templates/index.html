@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Eyentra - QR Protected Screenshots{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div class="hero-copy">
+        <p class="eyebrow">Private capture vault</p>
+        <h1>Turn photos and screenshots into password-protected QR drops.</h1>
+        <p class="hero-sub">
+            Upload an image, capture a browser selection, and instantly get a QR code,
+            share password, and view history tied to mobile verification.
+        </p>
+        <div class="hero-buttons">
+            {% if user %}
+                <a href="{{ url_for('dashboard') }}" class="btn btn-primary">Open Dashboard</a>
+                <a href="{{ url_for('extension_guide') }}" class="btn btn-outline">Set Up Extension</a>
+            {% else %}
+                <a href="{{ url_for('register') }}" class="btn btn-primary">Create Account</a>
+                <a href="{{ url_for('login') }}" class="btn btn-outline">Login</a>
+            {% endif %}
+        </div>
+    </div>
+    <div class="hero-device" aria-hidden="true">
+        <div class="capture-frame">
+            <div class="capture-top"></div>
+            <div class="capture-grid">
+                <span></span><span></span><span></span><span></span>
+            </div>
+            <div class="qr-chip">QR</div>
+        </div>
+    </div>
+</section>
+
+<section class="feature-strip">
+    <div>
+        <strong>Click extension</strong>
+        <span>Select any visible browser area.</span>
+    </div>
+    <div>
+        <strong>Auto upload</strong>
+        <span>The crop lands in your Eyentra account.</span>
+    </div>
+    <div>
+        <strong>Share safely</strong>
+        <span>A QR code and password are created instantly.</span>
+    </div>
+</section>
+
+<section class="section">
+    <div class="section-heading">
+        <p class="eyebrow">Workflow</p>
+        <h2>Built for fast proof sharing</h2>
+    </div>
+    <div class="steps">
+        <article class="step">
+            <span class="step-number">01</span>
+            <h3>Verify</h3>
+            <p>Register with a mobile number and OTP before creating private captures.</p>
+        </article>
+        <article class="step">
+            <span class="step-number">02</span>
+            <h3>Capture</h3>
+            <p>Upload an image or use the extension to crop the exact browser section.</p>
+        </article>
+        <article class="step">
+            <span class="step-number">03</span>
+            <h3>Gate</h3>
+            <p>Every upload receives a QR route protected by a generated password.</p>
+        </article>
+        <article class="step">
+            <span class="step-number">04</span>
+            <h3>Track</h3>
+            <p>See when a shared item is opened and which mobile number viewed it.</p>
+        </article>
+    </div>
+</section>
+{% endblock %}

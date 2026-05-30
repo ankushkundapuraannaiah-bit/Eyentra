@@ -1,4 +1,4 @@
-# Eyentra — Secure Photo Sharing with QR Codes
+# PhotoShare — Secure Photo Sharing with QR Codes
 
 A Python + Flask web application that lets users:
 
@@ -12,10 +12,10 @@ A Python + Flask web application that lets users:
 ## Project structure
 
 ```
-eyentra/
+photoshare/
 ├── app.py                  ← Main Flask application (all routes + models)
 ├── requirements.txt        ← Python dependencies
-├── eyentra.db           ← SQLite database (auto-created on first run)
+├── photoshare.db           ← SQLite database (auto-created on first run)
 ├── static/
 │   ├── css/style.css       ← Stylesheet
 │   ├── uploads/            ← Uploaded photos (auto-created)
@@ -53,6 +53,79 @@ python app.py
 ```
 http://127.0.0.1:5000
 ```
+
+
+## Deploy on Vercel
+
+This repository now includes Vercel-ready files at the project root:
+
+- `vercel.json`
+- `requirements.txt`
+- `api/index.py`
+
+The production app uses a web database through `DATABASE_URL` or `POSTGRES_URL`.
+Use Vercel Postgres, Neon, Supabase Postgres, or any hosted PostgreSQL database.
+
+### Required Vercel environment variables
+
+Set these in Vercel Project Settings -> Environment Variables:
+
+```text
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DATABASE
+SECRET_KEY=use-a-long-random-secret
+TWILIO_ACCOUNT_SID=your_twilio_account_sid
+TWILIO_AUTH_TOKEN=your_twilio_auth_token
+TWILIO_FROM_NUMBER=+1234567890
+```
+
+If Vercel gives you `POSTGRES_URL` instead of `DATABASE_URL`, the app will use it automatically.
+If you used a custom storage prefix such as `STORAGE`, the app can also use `STORAGE_URL`
+as long as it is a PostgreSQL connection URL.
+
+### Fixing FUNCTION_INVOCATION_FAILED
+
+If Vercel shows `FUNCTION_INVOCATION_FAILED`, open the deployment logs first. The most
+common cause for this app is a missing or incorrect PostgreSQL environment variable.
+This project also uses a slim root `requirements.txt` for Vercel; the heavier analytics
+libraries remain optional and are only used locally if installed.
+
+Check that at least one of these exists in Vercel and starts with `postgresql://` or
+`postgres://`:
+
+```text
+DATABASE_URL
+POSTGRES_URL
+POSTGRES_PRISMA_URL
+STORAGE_URL
+```
+
+After changing environment variables, redeploy the project. Vercel does not apply new
+environment variables to an already-created deployment.
+
+After pushing fixes, verify:
+
+```text
+https://your-vercel-domain/health
+```
+
+If `/health` still shows a Vercel crash page, Vercel is not running the latest root
+`api/index.py`, `requirements.txt`, and `vercel.json` files.
+
+### Important production changes
+
+- SQLite is only used for local development.
+- Uploaded images are stored in the database as binary data.
+- QR codes are stored in the database as binary data.
+- Viewer analytics charts are generated on demand, not saved permanently to disk.
+- Local folders under `photoshare/static/uploads`, `qrcodes`, and `analytics` are ignored by Git.
+
+### Deploy flow
+
+1. Push this project to `ankushkundapuraannaiah-bit/Eyentra`.
+2. Import the GitHub repo in Vercel.
+3. Keep the Vercel project root as the repository root.
+4. Add the environment variables above.
+5. Deploy.
 
 
 ## OTP (SMS) during development

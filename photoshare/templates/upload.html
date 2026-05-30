@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Upload - Eyentra{% endblock %}
+
+{% block content %}
+<div class="upload-card">
+    <p class="eyebrow">Manual upload</p>
+    <h1>Upload an image</h1>
+    <p class="auth-sub">
+        Eyentra will create a private QR link, password, and view log for this file.
+    </p>
+
+    <form method="POST" action="{{ url_for('upload_photo') }}" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="photo">Choose Image</label>
+            <div class="file-drop" id="fileDrop">
+                <input type="file" id="photo" name="photo" accept="image/*" required class="file-input" onchange="previewImage(event)">
+                <div class="file-drop-label" id="dropLabel">
+                    <span class="drop-icon">+</span>
+                    <strong>Click or drag an image here</strong>
+                    <small>PNG, JPG, JPEG, GIF, WEBP up to 10 MB</small>
+                </div>
+            </div>
+            <img id="preview" class="preview-img" src="#" alt="Preview" style="display:none;">
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-full">Upload and Generate QR</button>
+    </form>
+</div>
+
+<script>
+function previewImage(event) {
+    const file = event.target.files[0];
+    const preview = document.getElementById("preview");
+    const label = document.getElementById("dropLabel");
+
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            preview.src = e.target.result;
+            preview.style.display = "block";
+            label.style.display = "none";
+        };
+        reader.readAsDataURL(file);
+    }
+}
+</script>
+{% endblock %}

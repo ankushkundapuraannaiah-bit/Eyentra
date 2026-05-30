@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Eyentra{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <div>
+        <p class="eyebrow">Vault</p>
+        <h1>My captures</h1>
+    </div>
+    <div class="dashboard-actions">
+        <a href="{{ url_for('extension_guide') }}" class="btn btn-outline">Extension Setup</a>
+        <a href="{{ url_for('upload_photo') }}" class="btn btn-primary">Upload Image</a>
+    </div>
+</div>
+
+<section class="section">
+    <div class="section-heading inline">
+        <div>
+            <p class="eyebrow">Viewer analysis</p>
+            <h2>Audience breakdown</h2>
+        </div>
+        <span>{{ viewer_analysis.total_views }} total views</span>
+    </div>
+
+    <div class="analysis-grid">
+        <article class="analysis-card highlight">
+            <span>Total Views</span>
+            <strong>{{ viewer_analysis.total_views }}</strong>
+            <p>All successful QR/password views.</p>
+        </article>
+        <article class="analysis-card">
+            <span>Unique Viewers</span>
+            <strong>{{ viewer_analysis.unique_viewers }}</strong>
+            <p>Counted by viewer mobile number.</p>
+        </article>
+        <article class="analysis-card">
+            <span>Top Photo</span>
+            {% if viewer_analysis.top_photo %}
+                <strong>{{ viewer_analysis.top_photo.views }}</strong>
+                <p>{{ viewer_analysis.top_photo.name }}</p>
+            {% else %}
+                <strong>0</strong>
+                <p>No photo views yet.</p>
+            {% endif %}
+        </article>
+    </div>
+
+    {% if viewer_analysis.category_counts %}
+    <div class="analysis-panel">
+        <div class="analysis-list">
+            {% for item in viewer_analysis.category_counts %}
+            <div class="analysis-row">
+                <span>{{ item.viewer_type }}</span>
+                <strong>{{ item.count }}</strong>
+            </div>
+            {% endfor %}
+        </div>
+        {% if viewer_analysis.chart_url %}
+        <img
+            src="{{ viewer_analysis.chart_url }}"
+            alt="Viewer analysis chart"
+            class="analysis-chart"
+        >
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="empty-state slim">
+        Share a QR code to start seeing people, AI agents, Instagram followers, Facebook followers, and other viewer segments here.
+    </div>
+    {% endif %}
+</section>
+
+<section class="section">
+    <div class="section-heading inline">
+        <h2>Photos and screenshots</h2>
+        <span>{{ photos|length }} stored</span>
+    </div>
+
+    {% if photos %}
+    <div class="photo-grid">
+        {% for photo in photos %}
+        <article class="photo-card">
+            <a href="{{ url_for('photo_detail', photo_id=photo.id) }}">
+                <img src="{{ url_for('serve_photo_image', photo_id=photo.id) }}" alt="{{ photo.original_name }}" class="photo-thumb">
+            </a>
+            <div class="photo-card-body">
+                <p class="photo-name" title="{{ photo.original_name }}">{{ photo.original_name }}</p>
+                <p class="photo-meta">{{ photo.uploaded_at.strftime('%d %b %Y %H:%M') }}</p>
+                <p class="photo-meta">Views: <strong>{{ photo.view_logs|length }}</strong></p>
+                <div class="photo-actions">
+                    <a href="{{ url_for('photo_detail', photo_id=photo.id) }}" class="btn-small">Details</a>
+                    <form method="POST" action="{{ url_for('delete_photo', photo_id=photo.id) }}" onsubmit="return confirm('Delete this photo? This cannot be undone.');">
+                        <button type="submit" class="btn-small btn-danger">Delete</button>
+                    </form>
+                </div>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <h3>No captures yet</h3>
+        <p>Upload an image or use the browser extension to create your first QR-protected capture.</p>
+        <a href="{{ url_for('upload_photo') }}" class="btn btn-primary">Upload First Image</a>
+    </div>
+    {% endif %}
+</section>
+
+<section class="section">
+    <div class="section-heading inline">
+        <h2>View history</h2>
+        <span>Latest 50</span>
+    </div>
+
+    {% if notifications %}
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>View ID</th>
+                    <th>Photo</th>
+                    <th>Viewer Mobile</th>
+                    <th>Viewer Type</th>
+                    <th>Viewed At</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log, photo in notifications %}
+                <tr>
+                    <td><code>{{ log.view_id }}</code></td>
+                    <td><a href="{{ url_for('photo_detail', photo_id=photo.id) }}">{{ photo.original_name }}</a></td>
+                    <td>{{ log.viewer_mobile or 'Anonymous' }}</td>
+                    <td>{{ log.viewer_type or 'People' }}</td>
+                    <td>{{ log.viewed_at.strftime('%d %b %Y %H:%M') }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="empty-state slim">No one has viewed your photos yet.</p>
+    {% endif %}
+</section>
+{% endblock %}
