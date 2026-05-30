@@ -1,7 +1,7 @@
-flask==3.0.3
-flask-sqlalchemy==3.1.1
-qrcode[pil]==7.4.2
-pillow>=11.0.0
-werkzeug==3.0.3
-twilio==9.8.7
-psycopg[binary]>=3.2.0
+flask
+flask-sqlalchemy
+pg8000
+qrcode
+pillow
+werkzeug
+python-dotenv

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Eyentra — Secure Photo Sharing{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <h1>Share Photos Securely with QR Codes</h1>
+    <p class="hero-sub">
+        Upload your photo → get a password-protected QR code →
+        see who viewed it — all linked to their mobile number.
+    </p>
+
+    {% if not user %}
+    <div class="hero-buttons">
+        <a href="{{ url_for('register') }}" class="btn btn-primary">Get Started Free</a>
+        <a href="{{ url_for('login') }}"    class="btn btn-outline">I already have an account</a>
+    </div>
+    {% else %}
+    <div class="hero-buttons">
+        <a href="{{ url_for('upload_photo') }}" class="btn btn-primary">Upload a Photo</a>
+        <a href="{{ url_for('dashboard') }}"    class="btn btn-outline">My Dashboard</a>
+    </div>
+    {% endif %}
+</section>
+
+<!-- How it works -->
+<section class="how-it-works">
+    <h2>How it works</h2>
+    <div class="steps">
+        <div class="step">
+            <div class="step-icon">📱</div>
+            <h3>1. Register</h3>
+            <p>Sign up with your mobile number. We send a one-time password (OTP) to verify it's really you.</p>
+        </div>
+        <div class="step">
+            <div class="step-icon">📷</div>
+            <h3>2. Upload</h3>
+            <p>Upload any photo. A unique share-password and a QR code are generated instantly.</p>
+        </div>
+        <div class="step">
+            <div class="step-icon">📲</div>
+            <h3>3. Share the QR</h3>
+            <p>Send the QR code image to whoever you want. They scan it and enter the password to view.</p>
+        </div>
+        <div class="step">
+            <div class="step-icon">🔔</div>
+            <h3>4. Get Notified</h3>
+            <p>Every time someone views your photo you see a notification with their mobile number.</p>
+        </div>
+    </div>
+</section>
+{% endblock %}

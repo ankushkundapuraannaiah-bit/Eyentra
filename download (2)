@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Error — Eyentra{% endblock %}
+
+{% block content %}
+<div class="auth-card" style="text-align:center;">
+    <div style="font-size:4rem;">⚠️</div>
+    <h2>Something went wrong</h2>
+    <p>{{ message }}</p>
+    <a href="{{ url_for('index') }}" class="btn btn-primary">Go Home</a>
+</div>
+{% endblock %}

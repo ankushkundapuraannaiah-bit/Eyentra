@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Eyentra{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h2>My Dashboard</h2>
+    <a href="{{ url_for('upload_photo') }}" class="btn btn-primary">+ Upload New Photo</a>
+</div>
+
+<!-- ── Photos grid ── -->
+<section class="section">
+    <h3>My Photos ({{ photos|length }})</h3>
+
+    {% if photos %}
+    <div class="photo-grid">
+        {% for photo in photos %}
+        <div class="photo-card">
+            <a href="{{ url_for('photo_detail', photo_id=photo.id) }}">
+                <img
+                    src="{{ url_for('static', filename='uploads/' + photo.filename) }}"
+                    alt="{{ photo.original_name }}"
+                    class="photo-thumb"
+                >
+            </a>
+            <div class="photo-card-body">
+                <p class="photo-name" title="{{ photo.original_name }}">{{ photo.original_name }}</p>
+                <p class="photo-meta">
+                    Uploaded: {{ photo.uploaded_at.strftime('%d %b %Y %H:%M') }}
+                </p>
+                <p class="photo-meta">
+                    Views: <strong>{{ photo.view_logs|length }}</strong>
+                </p>
+                <div class="photo-actions">
+                    <a href="{{ url_for('photo_detail', photo_id=photo.id) }}" class="btn-small">View Details</a>
+                    <form method="POST" action="{{ url_for('delete_photo', photo_id=photo.id) }}"
+                          onsubmit="return confirm('Delete this photo? This cannot be undone.');"
+                          style="display:inline;">
+                        <button type="submit" class="btn-small btn-danger">Delete</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <p>You have not uploaded any photos yet.</p>
+        <a href="{{ url_for('upload_photo') }}" class="btn btn-primary">Upload your first photo</a>
+    </div>
+    {% endif %}
+</section>
+
+<!-- ── View notifications ── -->
+<section class="section">
+    <h3>Who Viewed My Photos</h3>
+
+    {% if notifications %}
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>View ID</th>
+                    <th>Photo</th>
+                    <th>Viewer Mobile</th>
+                    <th>Viewed At</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log, photo in notifications %}
+                <tr>
+                    <td><code>{{ log.view_id }}</code></td>
+                    <td>
+                        <a href="{{ url_for('photo_detail', photo_id=photo.id) }}">
+                            {{ photo.original_name }}
+                        </a>
+                    </td>
+                    <td>
+                        {% if log.viewer_mobile %}
+                            📱 {{ log.viewer_mobile }}
+                        {% else %}
+                            <em>Anonymous</em>
+                        {% endif %}
+                    </td>
+                    <td>{{ log.viewed_at.strftime('%d %b %Y %H:%M') }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="empty-state">No one has viewed your photos yet.</p>
+    {% endif %}
+</section>
+{% endblock %}

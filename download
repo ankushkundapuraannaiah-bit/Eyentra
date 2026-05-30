@@ -1,0 +1,10 @@
+# Vercel Python runtime entry point.
+# All traffic is rewritten to this file via vercel.json.
+# We simply import the Flask app object from the project root.
+import sys
+import os
+
+# Ensure the project root is on the path so `import app` finds app.py
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from app import app  # noqa: F401  — Vercel looks for a callable named `app`

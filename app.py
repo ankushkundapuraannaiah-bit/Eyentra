@@ -35,25 +35,41 @@ from werkzeug.utils import secure_filename
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "change-this-to-something-very-secret-in-production")
 
-# SQLite database stored next to this file
+# Directories (only used in local dev; Vercel filesystem is read-only)
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, "static", "uploads")
 QR_DIR     = os.path.join(BASE_DIR, "static", "qrcodes")
 
-# Create directories for local development (skipped on Vercel)
+# Create local dirs only when NOT on Vercel
 if not os.environ.get("VERCEL"):
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     os.makedirs(QR_DIR,     exist_ok=True)
 
-# Database configuration — support PostgreSQL for production (Vercel/Neon)
-database_url = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL") or os.environ.get("STORAGE_URL")
+# ── Database configuration ──────────────────────────────────────────────────
+# Prefer PostgreSQL env vars (Vercel / Neon inject one of these).
+# Fall back to SQLite for local development only.
+database_url = (
+    os.environ.get("DATABASE_URL")
+    or os.environ.get("POSTGRES_URL")
+    or os.environ.get("POSTGRES_PRISMA_URL")
+    or os.environ.get("STORAGE_URL")
+)
+
 if database_url:
-    # SQLAlchemy requires 'postgresql://' instead of 'postgres://'
+    # Normalise legacy "postgres://" scheme
     if database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql://", 1)
+    # Strip Vercel query params (e.g. ?sslmode=require) that confuse pg8000
+    # and inject the pg8000 driver so we don't need psycopg2's C extensions
+    if "postgresql+pg8000" not in database_url:
+        database_url = database_url.replace("postgresql://", "postgresql+pg8000://", 1)
     app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+    print(f"[DB] Using PostgreSQL (pg8000)")
 else:
+    if os.environ.get("VERCEL"):
+        print("WARNING: No DATABASE_URL found. Vercel deployment will fail without PostgreSQL.")
     app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{os.path.join(BASE_DIR, 'eyentra.db')}"
+    print("[DB] Using local SQLite")
 
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["MAX_CONTENT_LENGTH"]             = 10 * 1024 * 1024   # 10 MB limit
@@ -110,8 +126,6 @@ class Photo(db.Model):
     share_password = db.Column(db.String(20),  nullable=False)   # auto-generated
     share_token    = db.Column(db.String(64),  unique=True, nullable=False)
     qr_filename    = db.Column(db.String(256), nullable=True)
-    file_blob      = db.Column(db.LargeBinary, nullable=True)     # For production/Vercel storage
-    qr_blob        = db.Column(db.LargeBinary, nullable=True)     # For production/Vercel storage
     uploaded_at    = db.Column(db.DateTime,    default=datetime.utcnow)
 
     view_logs      = db.relationship("ViewLog", backref="photo", lazy=True)
@@ -177,10 +191,10 @@ def send_otp_simulation(mobile, otp):
     print(f"{'='*50}\n")
 
 
-def make_qr_code(share_url, photo_id=None):
+def make_qr_code(share_url, photo_id):
     """
     Generate a QR code image for the given URL and save it to disk.
-    Returns the filename and the binary image data.
+    Returns the filename of the saved QR image.
     """
     qr = qrcode.QRCode(
         version          = 1,
@@ -192,16 +206,9 @@ def make_qr_code(share_url, photo_id=None):
     qr.make(fit=True)
 
     img          = qr.make_image(fill_color="black", back_color="white")
-    
-    img_io = io.BytesIO()
-    img.save(img_io, 'PNG')
-    qr_blob = img_io.getvalue()
-    
-    qr_filename = f"qr_{photo_id}_{uuid.uuid4().hex[:8]}.png" if photo_id else f"qr_{uuid.uuid4().hex[:8]}.png"
-    if not os.environ.get("VERCEL"):
-        img.save(os.path.join(QR_DIR, qr_filename))
-        
-    return qr_filename, qr_blob
+    qr_filename  = f"qr_{photo_id}_{uuid.uuid4().hex[:8]}.png"
+    img.save(os.path.join(QR_DIR, qr_filename))
+    return qr_filename
 
 
 def current_user():
@@ -223,16 +230,6 @@ def login_required_redirect(endpoint="login"):
 # ─────────────────────────────────────────────
 #  Routes — Authentication
 # ─────────────────────────────────────────────
-
-@app.route("/health")
-def health():
-    """Health check route for Vercel/Production verification."""
-    try:
-        User.query.limit(1).all()
-        return jsonify({"status": "healthy", "database": "connected"}), 200
-    except Exception as e:
-        return jsonify({"status": "unhealthy", "error": str(e)}), 500
-
 
 @app.route("/")
 def index():
@@ -424,12 +421,8 @@ def upload_photo():
         # Save the file with a unique name
         ext            = secure_filename(file.filename).rsplit(".", 1)[1].lower()
         unique_name    = f"{uuid.uuid4().hex}.{ext}"
-        
-        file_content   = file.read()
-        if not os.environ.get("VERCEL"):
-            save_path = os.path.join(UPLOAD_DIR, unique_name)
-            with open(save_path, "wb") as f:
-                f.write(file_content)
+        save_path      = os.path.join(UPLOAD_DIR, unique_name)
+        file.save(save_path)
 
         share_password = generate_share_password()
         share_token    = generate_share_token()
@@ -440,16 +433,14 @@ def upload_photo():
             original_name = secure_filename(file.filename),
             share_password= share_password,
             share_token   = share_token,
-            file_blob     = file_content
         )
         db.session.add(photo)
         db.session.flush()   # get photo.id before committing
 
         # Build the public share URL and generate QR code
         share_url      = url_for("view_shared_photo", token=share_token, _external=True)
-        qr_filename, qr_blob = make_qr_code(share_url, photo.id)
+        qr_filename    = make_qr_code(share_url, photo.id)
         photo.qr_filename = qr_filename
-        photo.qr_blob     = qr_blob
         db.session.commit()
 
         flash("Photo uploaded successfully!", "success")
@@ -578,26 +569,29 @@ def view_shared_photo(token):
     return render_template("view_photo.html", token=token, photo=None, need_password=True, viewer=viewer)
 
 
-# ─────────────────────────────────────────────
-#  Routes — Media Serving (Database Fallback for Production)
-# ─────────────────────────────────────────────
-
 @app.route("/static/uploads/<filename>")
-def serve_upload_compat(filename):
-    """Serve uploaded photos from DB if disk is missing (for Vercel)."""
+def serve_upload(filename):
+    """Serve uploaded photos — from DB blob on Vercel, from disk locally."""
     photo = Photo.query.filter_by(filename=filename).first()
     if photo and photo.file_blob:
-        return app.response_class(photo.file_blob, mimetype='image/png')
+        ext  = filename.rsplit(".", 1)[-1].lower()
+        mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+                "gif": "image/gif",  "webp": "image/webp"}.get(ext, "image/octet-stream")
+        return app.response_class(photo.file_blob, mimetype=mime)
+    if os.environ.get("VERCEL"):
+        return "Not found", 404
     return send_from_directory(UPLOAD_DIR, filename)
 
 
 @app.route("/static/qrcodes/<filename>")
 @app.route("/qrcodes/<filename>")
-def serve_qr_compat(filename):
-    """Serve QR codes from DB if disk is missing (for Vercel)."""
+def serve_qr(filename):
+    """Serve QR codes — from DB blob on Vercel, from disk locally."""
     photo = Photo.query.filter_by(qr_filename=filename).first()
     if photo and photo.qr_blob:
-        return app.response_class(photo.qr_blob, mimetype='image/png')
+        return app.response_class(photo.qr_blob, mimetype="image/png")
+    if os.environ.get("VERCEL"):
+        return "Not found", 404
     return send_from_directory(QR_DIR, filename)
 
 
@@ -605,13 +599,15 @@ def serve_qr_compat(filename):
 #  Bootstrap the database and run
 # ─────────────────────────────────────────────
 
-# Ensure tables are created on startup (needed for Vercel/Production)
+# Run db.create_all() at startup so tables exist on first deploy.
+# This is safe to call repeatedly — it is a no-op if tables already exist.
 try:
     with app.app_context():
         db.create_all()
+        print("[DB] Tables verified / created OK")
 except Exception as e:
-    print(f"Error initializing database: {e}")
-
+    # Print clearly so Vercel function logs expose the root cause
+    print(f"CRITICAL: Database initialisation failed: {e}")
 
 if __name__ == "__main__":
     print("\nEyentra is starting...")
