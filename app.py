@@ -15,17 +15,12 @@ import random
 import string
 import base64
 import tempfile
+from collections import Counter
 from datetime import datetime, timedelta
 
 os.environ.setdefault("MPLCONFIGDIR", os.path.join(tempfile.gettempdir(), "matplotlib"))
 
 import qrcode
-import numpy as np
-import pandas as pd
-import seaborn as sns
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 from PIL import Image
 from twilio.rest import Client
 
@@ -51,9 +46,13 @@ UPLOAD_DIR = os.path.join(BASE_DIR, "static", "uploads")
 QR_DIR     = os.path.join(BASE_DIR, "static", "qrcodes")
 ANALYTICS_DIR = os.path.join(BASE_DIR, "static", "analytics")
 
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(QR_DIR,     exist_ok=True)
-os.makedirs(ANALYTICS_DIR, exist_ok=True)
+for runtime_dir in (UPLOAD_DIR, QR_DIR, ANALYTICS_DIR):
+    try:
+        os.makedirs(runtime_dir, exist_ok=True)
+    except OSError:
+        # Vercel's deployed function directory is not a durable writable store.
+        # Production media is stored in the database instead.
+        pass
 
 def normalize_database_url(raw_url):
     if not raw_url:
@@ -244,6 +243,8 @@ def ensure_database_schema():
 @app.before_request
 def prepare_database_for_request():
     global _schema_ready
+    if request.endpoint == "health":
+        return None
     if _schema_ready:
         return None
     try:
@@ -258,6 +259,15 @@ def prepare_database_for_request():
                 f"POSTGRES_URL environment variable. Details: {exc}"
             ),
         ), 500
+
+
+@app.route("/health")
+def health():
+    return jsonify({
+        "ok": True,
+        "database_configured": bool(database_url),
+        "database_driver": db.engine.url.drivername,
+    })
 
 
 def infer_viewer_type(selected_type, user_agent="", referrer=""):
@@ -285,9 +295,9 @@ def infer_viewer_type(selected_type, user_agent="", referrer=""):
 
 def build_viewer_analysis(user):
     """Use pandas/numpy/seaborn to summarize and chart the user's view logs."""
-    frame = viewer_analysis_frame(user)
+    rows = viewer_analysis_rows(user)
 
-    if frame.empty:
+    if not rows:
         return {
             "total_views": 0,
             "unique_viewers": 0,
@@ -296,43 +306,49 @@ def build_viewer_analysis(user):
             "chart_url": None,
         }
 
-    category_counts = (
-        frame["viewer_type"]
-        .value_counts()
-        .rename_axis("viewer_type")
-        .reset_index(name="count")
-    )
-    photo_counts = frame["photo"].value_counts()
+    category_counter = Counter(row["viewer_type"] for row in rows)
+    photo_counter = Counter(row["photo"] for row in rows)
     top_photo = None
-    if not photo_counts.empty:
-        top_photo = {"name": photo_counts.index[0], "views": int(photo_counts.iloc[0])}
+    if photo_counter:
+        photo_name, view_count = photo_counter.most_common(1)[0]
+        top_photo = {"name": photo_name, "views": int(view_count)}
 
     return {
-        "total_views": int(len(frame)),
-        "unique_viewers": int(frame["viewer_mobile"].nunique()),
-        "category_counts": category_counts.to_dict("records"),
+        "total_views": int(len(rows)),
+        "unique_viewers": int(len({row["viewer_mobile"] for row in rows})),
+        "category_counts": [
+            {"viewer_type": viewer_type, "count": int(count)}
+            for viewer_type, count in category_counter.most_common()
+        ],
         "top_photo": top_photo,
         "chart_url": url_for("viewer_analysis_chart"),
     }
 
 
-def viewer_analysis_frame(user):
+def viewer_analysis_rows(user):
     rows = (
         db.session.query(ViewLog, Photo)
         .join(Photo, ViewLog.photo_id == Photo.id)
         .filter(Photo.user_id == user.id)
         .all()
     )
-    return pd.DataFrame([{
+    return [{
         "photo": photo.original_name,
         "viewer_mobile": log.viewer_mobile or "Unknown",
         "viewer_type": log.viewer_type or infer_viewer_type(None, log.user_agent or "", log.referrer or ""),
         "viewed_at": log.viewed_at,
-    } for log, photo in rows])
+    } for log, photo in rows]
 
 
 def render_viewer_analysis_chart(user):
-    frame = viewer_analysis_frame(user)
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import pandas as pd
+    import seaborn as sns
+
+    frame = pd.DataFrame(viewer_analysis_rows(user))
     if frame.empty:
         return None
 
