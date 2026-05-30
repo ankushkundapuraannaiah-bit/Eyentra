@@ -55,19 +55,37 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(QR_DIR,     exist_ok=True)
 os.makedirs(ANALYTICS_DIR, exist_ok=True)
 
-database_url = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
-if database_url and database_url.startswith("postgres://"):
-    database_url = database_url.replace("postgres://", "postgresql+psycopg://", 1)
-elif database_url and database_url.startswith("postgresql://"):
-    database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+def normalize_database_url(raw_url):
+    if not raw_url:
+        return None
+    if raw_url.startswith("postgres://"):
+        return raw_url.replace("postgres://", "postgresql+psycopg://", 1)
+    if raw_url.startswith("postgresql://"):
+        return raw_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    if raw_url.startswith("postgresql+psycopg://"):
+        return raw_url
+    return None
+
+
+database_url = None
+for env_name in ("DATABASE_URL", "POSTGRES_URL", "POSTGRES_PRISMA_URL", "STORAGE_URL"):
+    database_url = normalize_database_url(os.environ.get(env_name))
+    if database_url:
+        break
 
 app.config["SQLALCHEMY_DATABASE_URI"]        = database_url or f"sqlite:///{os.path.join(BASE_DIR, 'eyentra.db')}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["MAX_CONTENT_LENGTH"]             = 10 * 1024 * 1024   # 10 MB limit
+if database_url:
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "pool_pre_ping": True,
+        "connect_args": {"connect_timeout": 5},
+    }
 
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
 
 db = SQLAlchemy(app)
+_schema_ready = False
 
 
 # ─────────────────────────────────────────────
@@ -178,6 +196,26 @@ def ensure_database_schema():
     """Create tables and add lightweight SQLite columns added after first run."""
     db.create_all()
     if not db.engine.url.drivername.startswith("sqlite"):
+        if db.engine.url.drivername.startswith("postgresql"):
+            postgres_columns = {
+                "photos": {
+                    "image_data": "BYTEA",
+                    "image_mime": "VARCHAR(80)",
+                    "qr_data": "BYTEA",
+                    "qr_mime": "VARCHAR(80)",
+                },
+                "view_logs": {
+                    "viewer_type": "VARCHAR(40)",
+                    "referrer": "VARCHAR(512)",
+                    "user_agent": "VARCHAR(512)",
+                },
+            }
+            for table_name, columns in postgres_columns.items():
+                for column_name, column_type in columns.items():
+                    db.session.execute(db.text(
+                        f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS {column_name} {column_type}"
+                    ))
+            db.session.commit()
         return
 
     existing_columns = {row[1] for row in db.session.execute(db.text("PRAGMA table_info(view_logs)"))}
@@ -201,6 +239,25 @@ def ensure_database_schema():
         if column_name not in existing_photo_columns:
             db.session.execute(db.text(f"ALTER TABLE photos ADD COLUMN {column_name} {column_type}"))
     db.session.commit()
+
+
+@app.before_request
+def prepare_database_for_request():
+    global _schema_ready
+    if _schema_ready:
+        return None
+    try:
+        ensure_database_schema()
+        _schema_ready = True
+    except Exception as exc:
+        app.logger.exception("Database initialization failed")
+        return render_template(
+            "error.html",
+            message=(
+                "Database connection failed. Check the Vercel DATABASE_URL or "
+                f"POSTGRES_URL environment variable. Details: {exc}"
+            ),
+        ), 500
 
 
 def infer_viewer_type(selected_type, user_agent="", referrer=""):
@@ -854,10 +911,6 @@ def serve_qr(filename):
 # ─────────────────────────────────────────────
 #  Bootstrap the database and run
 # ─────────────────────────────────────────────
-
-if os.environ.get("VERCEL") or os.environ.get("AUTO_CREATE_TABLES", "1") == "1":
-    with app.app_context():
-        ensure_database_schema()
 
 if __name__ == "__main__":
     with app.app_context():
