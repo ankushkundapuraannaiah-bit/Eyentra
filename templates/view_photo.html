@@ -1,43 +1,54 @@
 {% extends "base.html" %}
-{% block title %}View Photo - Eyentra{% endblock %}
+{% block title %}View Photo — Eyentra{% endblock %}
 
 {% block content %}
+
 {% if need_password %}
+<!-- ── Password gate ── -->
 <div class="auth-card">
-    <p class="eyebrow">Protected QR</p>
-    <h2>Password required</h2>
-    <p class="auth-sub">Enter the share password to view this Eyentra photo.</p>
+    <h2>🔐 Password Required</h2>
+    <p class="auth-sub">
+        You have scanned an Eyentra QR code.
+        Enter the share password to view the photo.
+    </p>
 
     <form method="POST" action="{{ url_for('view_shared_photo', token=token) }}">
+
         <div class="form-group">
             <label for="password">Share Password</label>
-            <input type="text" id="password" name="password" placeholder="Enter the share password" required autofocus class="otp-input">
+            <input
+                type="text"
+                id="password"
+                name="password"
+                placeholder="Enter the share password"
+                required
+                autofocus
+                class="otp-input"
+            >
         </div>
 
         {% if not viewer %}
+        <!-- Viewer is not logged in — collect their mobile -->
         <div class="form-group">
             <label for="viewer_mobile">Your Mobile Number</label>
-            <input type="tel" id="viewer_mobile" name="viewer_mobile" placeholder="e.g. 9876543210" required>
-            <small>Your mobile number will be shown to the photo owner.</small>
+            <input
+                type="tel"
+                id="viewer_mobile"
+                name="viewer_mobile"
+                placeholder="e.g. 9876543210"
+                required
+            >
+            <small>
+                Your mobile number will be shared with the photo owner so they know who viewed it.
+            </small>
         </div>
         {% else %}
-        <div class="info-box">
-            <p>Viewing as <strong>{{ viewer.mobile }}</strong></p>
+        <!-- Already logged in — mobile is known -->
+        <div class="info-box" style="margin-bottom:1rem;">
+            <p>Viewing as <strong>📱 {{ viewer.mobile }}</strong></p>
         </div>
         <input type="hidden" name="viewer_mobile" value="{{ viewer.mobile }}">
         {% endif %}
-
-        <div class="form-group">
-            <label for="viewer_type">Viewer Type</label>
-            <select id="viewer_type" name="viewer_type">
-                <option value="person">Person</option>
-                <option value="instagram">Instagram follower</option>
-                <option value="facebook">Facebook follower</option>
-                <option value="ai_agent">AI agent</option>
-                <option value="other">Other viewer</option>
-            </select>
-            <small>This helps the photo owner understand who viewed the shared QR.</small>
-        </div>
 
         <button type="submit" class="btn btn-primary btn-full">View Photo</button>
     </form>
@@ -48,20 +59,30 @@
     </p>
     {% endif %}
 </div>
+
 {% else %}
+<!-- ── Photo revealed ── -->
 <div class="view-success">
     <div class="view-id-banner">
-        Access granted. View ID: <strong><code>{{ view_id }}</code></strong>
+        ✅ Access granted — Your View ID: <strong><code>{{ view_id }}</code></strong>
     </div>
 
     <div class="viewed-photo-wrap">
-        <img src="{{ url_for('serve_photo_image', photo_id=photo.id) }}" alt="Shared photo" class="viewed-photo">
+        <img
+            src="{{ url_for('serve_upload', filename=photo.filename) }}"
+            alt="Shared photo"
+            class="viewed-photo"
+        >
     </div>
 
     <div class="info-box" style="max-width:500px;margin:1rem auto;text-align:center;">
-        <p>The person who shared this photo can now see that this mobile number viewed it.</p>
+        <p>
+            The person who shared this photo has been notified that you viewed it.
+            Your mobile number has been recorded.
+        </p>
         <a href="{{ url_for('index') }}" class="btn btn-outline">Go to Eyentra Home</a>
     </div>
 </div>
 {% endif %}
+
 {% endblock %}
