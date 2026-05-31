@@ -1,41 +1,46 @@
-{% extends "base.html" %}
-{% block title %}Login — Eyentra{% endblock %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Eyentra{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
 
-{% block content %}
-<div class="auth-card">
-    <h2>Welcome back</h2>
-    <p class="auth-sub">Log in with your verified mobile number and password.</p>
+<!-- ── Navigation bar ── -->
+<nav class="navbar">
+    <a href="{{ url_for('index') }}" class="brand">📷 Eyentra</a>
+    <div class="nav-links">
+        <a href="{{ url_for('extension_guide') }}">🧩 Extension</a>
+        {% if user %}
+            <span class="nav-mobile">📱 {{ user.mobile }}</span>
+            <a href="{{ url_for('dashboard') }}">Dashboard</a>
+            <a href="{{ url_for('upload_photo') }}" class="btn-small">+ Upload</a>
+            <a href="{{ url_for('logout') }}">Logout</a>
+        {% else %}
+            <a href="{{ url_for('login') }}">Login</a>
+            <a href="{{ url_for('register') }}" class="btn-small">Register</a>
+        {% endif %}
+    </div>
+</nav>
 
-    <form method="POST" action="{{ url_for('login') }}">
+<!-- ── Flash messages ── -->
+<div class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
 
-        <div class="form-group">
-            <label for="mobile">Mobile Number</label>
-            <input
-                type="tel"
-                id="mobile"
-                name="mobile"
-                placeholder="e.g. 9876543210"
-                required
-                autofocus
-            >
-        </div>
-
-        <div class="form-group">
-            <label for="password">Password</label>
-            <input
-                type="password"
-                id="password"
-                name="password"
-                placeholder="Your password"
-                required
-            >
-        </div>
-
-        <button type="submit" class="btn btn-primary btn-full">Log In</button>
-    </form>
-
-    <p class="auth-switch">
-        New here? <a href="{{ url_for('register') }}">Create a free account</a>
-    </p>
+    {% block content %}{% endblock %}
 </div>
-{% endblock %}
+
+<footer class="footer">
+    <p>Eyentra &copy; {{ now.year if now else 2026 }} — Share photos securely with QR codes</p>
+</footer>
+
+</body>
+</html>
