@@ -3,9 +3,6 @@ Eyentra - Secure Photo Sharing with QR Codes
 ================================================
 A Flask web application that lets users register with their mobile number,
 upload photos, share them via QR codes, and track who viewed them.
-
-Author  : You
-Purpose : Secure photo sharing platform
 """
 
 import os
@@ -59,12 +56,18 @@ if database_url:
     # Normalise legacy "postgres://" scheme
     if database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql://", 1)
-    # Strip Vercel query params (e.g. ?sslmode=require) that confuse pg8000
-    # and inject the pg8000 driver so we don't need psycopg2's C extensions
-    if "postgresql+pg8000" not in database_url:
-        database_url = database_url.replace("postgresql://", "postgresql+pg8000://", 1)
-    app.config["SQLALCHEMY_DATABASE_URI"] = database_url
-    print(f"[DB] Using PostgreSQL (pg8000)")
+    # Strip query params (e.g. ?sslmode=require&channel_binding=require) —
+    # pg8000 doesn't accept them in the URL; we pass ssl separately via connect_args
+    base_url = database_url.split("?")[0]
+    # Use pg8000 driver (pure Python, no C extensions needed on Vercel)
+    if "postgresql+pg8000" not in base_url:
+        base_url = base_url.replace("postgresql://", "postgresql+pg8000://", 1)
+    app.config["SQLALCHEMY_DATABASE_URI"] = base_url
+    # Neon requires SSL — pass it via connect_args instead of the URL
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "connect_args": {"ssl_context": True}
+    }
+    print(f"[DB] Using PostgreSQL (pg8000): {base_url.split('@')[-1]}")  # log host only
 else:
     if os.environ.get("VERCEL"):
         print("WARNING: No DATABASE_URL found. Vercel deployment will fail without PostgreSQL.")
@@ -84,8 +87,6 @@ db = SQLAlchemy(app)
 # ─────────────────────────────────────────────
 
 class User(db.Model):
-    """Stores registered users. Mobile number is the unique identifier."""
-
     __tablename__ = "users"
 
     id          = db.Column(db.Integer,     primary_key=True)
@@ -94,13 +95,11 @@ class User(db.Model):
     is_verified = db.Column(db.Boolean,     default=False)
     created_at  = db.Column(db.DateTime,    default=datetime.utcnow)
 
-    photos      = db.relationship("Photo",   backref="owner", lazy=True)
-    view_logs   = db.relationship("ViewLog", backref="viewer", lazy=True)
+    photos    = db.relationship("Photo",   backref="owner",  lazy=True)
+    view_logs = db.relationship("ViewLog", backref="viewer", lazy=True)
 
 
 class OTPRecord(db.Model):
-    """Temporary OTP storage. Expires after 10 minutes."""
-
     __tablename__ = "otp_records"
 
     id         = db.Column(db.Integer,    primary_key=True)
@@ -111,41 +110,32 @@ class OTPRecord(db.Model):
 
 
 class Photo(db.Model):
-    """
-    Stores uploaded photos.
-    Each photo gets a unique share-password that the uploader must share
-    with anyone they want to allow to view the photo via QR code.
-    """
-
     __tablename__ = "photos"
 
     id             = db.Column(db.Integer,     primary_key=True)
     user_id        = db.Column(db.Integer,     db.ForeignKey("users.id"), nullable=False)
     filename       = db.Column(db.String(256), nullable=False)
     original_name  = db.Column(db.String(256), nullable=False)
-    share_password = db.Column(db.String(20),  nullable=False)   # auto-generated
+    share_password = db.Column(db.String(20),  nullable=False)
     share_token    = db.Column(db.String(64),  unique=True, nullable=False)
     qr_filename    = db.Column(db.String(256), nullable=True)
+    file_blob      = db.Column(db.LargeBinary, nullable=True)   # stores image bytes in production
+    qr_blob        = db.Column(db.LargeBinary, nullable=True)   # stores QR bytes in production
     uploaded_at    = db.Column(db.DateTime,    default=datetime.utcnow)
 
-    view_logs      = db.relationship("ViewLog", backref="photo", lazy=True)
+    view_logs = db.relationship("ViewLog", backref="photo", lazy=True)
 
 
 class ViewLog(db.Model):
-    """
-    Records every time someone views a photo using the share-password.
-    A unique view-ID is generated and the uploader is notified (shown in dashboard).
-    """
-
     __tablename__ = "view_logs"
 
-    id         = db.Column(db.Integer,    primary_key=True)
-    photo_id   = db.Column(db.Integer,   db.ForeignKey("photos.id"),  nullable=False)
-    viewer_id  = db.Column(db.Integer,   db.ForeignKey("users.id"),   nullable=True)   # null = anonymous
-    view_id    = db.Column(db.String(64), unique=True, nullable=False)                 # unique view event ID
+    id            = db.Column(db.Integer,    primary_key=True)
+    photo_id      = db.Column(db.Integer,    db.ForeignKey("photos.id"), nullable=False)
+    viewer_id     = db.Column(db.Integer,    db.ForeignKey("users.id"),  nullable=True)
+    view_id       = db.Column(db.String(64), unique=True, nullable=False)
     viewer_mobile = db.Column(db.String(15), nullable=True)
-    viewed_at  = db.Column(db.DateTime,  default=datetime.utcnow)
-    notified   = db.Column(db.Boolean,   default=False)
+    viewed_at     = db.Column(db.DateTime,   default=datetime.utcnow)
+    notified      = db.Column(db.Boolean,    default=False)
 
 
 # ─────────────────────────────────────────────
@@ -153,66 +143,86 @@ class ViewLog(db.Model):
 # ─────────────────────────────────────────────
 
 def generate_otp():
-    """Return a random 6-digit OTP as a string."""
     return str(random.randint(100000, 999999))
 
 
 def generate_share_password(length=10):
-    """
-    Create a memorable share-password made of letters and digits.
-    Example: 'aB3kT7mNqP'
-    """
     chars = string.ascii_letters + string.digits
     return "".join(random.choices(chars, k=length))
 
 
 def generate_share_token():
-    """UUID-based unique token embedded in the QR code URL."""
     return str(uuid.uuid4()).replace("-", "")
 
 
 def generate_view_id():
-    """Short unique ID for each view event."""
     return "VW-" + str(uuid.uuid4())[:8].upper()
 
 
 def allowed_file(filename):
-    """Check that the uploaded file has an accepted image extension."""
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-def send_otp_simulation(mobile, otp):
+def send_otp(mobile, otp):
     """
-    In a real deployment you would call an SMS gateway here (Twilio, MSG91, etc.).
-    For development we just print the OTP to the terminal.
+    Send OTP via Twilio if configured, otherwise simulate.
+    Returns the OTP string if simulating (so caller can flash it to the user),
+    or None if sent via Twilio.
     """
+    twilio_sid   = os.environ.get("TWILIO_ACCOUNT_SID")
+    twilio_token = os.environ.get("TWILIO_AUTH_TOKEN")
+    twilio_from  = os.environ.get("TWILIO_FROM_NUMBER")
+
+    if twilio_sid and twilio_token and twilio_from:
+        try:
+            from twilio.rest import Client
+            client = Client(twilio_sid, twilio_token)
+            client.messages.create(
+                body=f"Your Eyentra OTP is: {otp}. Valid for 10 minutes.",
+                from_=twilio_from,
+                to=f"+{mobile}" if not mobile.startswith("+") else mobile,
+            )
+            print(f"[SMS] OTP sent to {mobile} via Twilio")
+            return None
+        except Exception as e:
+            print(f"[SMS] Twilio error: {e} — falling back to simulation")
+
+    # Simulation — print to terminal and return OTP so UI can display it
     print(f"\n{'='*50}")
-    print(f"  [SMS SIMULATION]  To: {mobile}   OTP: {otp}")
+    masked = f"******{mobile[-4:]}" if len(mobile) > 4 else mobile
+    print(f"  [SMS SIMULATION]  To: {masked}   OTP: {otp}")
     print(f"{'='*50}\n")
+    return otp
 
 
 def make_qr_code(share_url, photo_id):
-    """
-    Generate a QR code image for the given URL and save it to disk.
-    Returns the filename of the saved QR image.
-    """
+    """Generate a QR code. Returns (filename, blob_bytes)."""
     qr = qrcode.QRCode(
-        version          = 1,
-        error_correction = qrcode.constants.ERROR_CORRECT_H,
-        box_size         = 10,
-        border           = 4,
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_H,
+        box_size=10,
+        border=4,
     )
     qr.add_data(share_url)
     qr.make(fit=True)
 
-    img          = qr.make_image(fill_color="black", back_color="white")
-    qr_filename  = f"qr_{photo_id}_{uuid.uuid4().hex[:8]}.png"
-    img.save(os.path.join(QR_DIR, qr_filename))
-    return qr_filename
+    img = qr.make_image(fill_color="black", back_color="white")
+
+    # Always capture bytes (needed for DB storage on Vercel)
+    img_io = io.BytesIO()
+    img.save(img_io, "PNG")
+    qr_blob = img_io.getvalue()
+
+    qr_filename = f"qr_{photo_id}_{uuid.uuid4().hex[:8]}.png"
+
+    # Also save to disk in local dev
+    if not os.environ.get("VERCEL"):
+        img.save(os.path.join(QR_DIR, qr_filename))
+
+    return qr_filename, qr_blob
 
 
 def current_user():
-    """Return the logged-in User object, or None."""
     user_id = session.get("user_id")
     if user_id:
         return User.query.get(user_id)
@@ -220,7 +230,6 @@ def current_user():
 
 
 def login_required_redirect(endpoint="login"):
-    """Decorator-free guard: call at the top of any protected route."""
     if not session.get("user_id"):
         flash("Please log in first.", "warning")
         return redirect(url_for(endpoint))
@@ -228,7 +237,20 @@ def login_required_redirect(endpoint="login"):
 
 
 # ─────────────────────────────────────────────
-#  Routes — Authentication
+#  Routes — Health check
+# ─────────────────────────────────────────────
+
+@app.route("/health")
+def health():
+    try:
+        User.query.limit(1).all()
+        return jsonify({"status": "healthy", "database": "connected"}), 200
+    except Exception as e:
+        return jsonify({"status": "unhealthy", "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────
+#  Routes — Public pages
 # ─────────────────────────────────────────────
 
 @app.route("/")
@@ -237,18 +259,17 @@ def index():
     return render_template("index.html", user=user)
 
 
+# ─────────────────────────────────────────────
+#  Routes — Authentication
+# ─────────────────────────────────────────────
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
-    """
-    Step 1 of registration: collect mobile + password.
-    An OTP is sent (simulated) and the user is taken to the verify page.
-    """
     if request.method == "POST":
         mobile   = request.form.get("mobile",   "").strip()
         password = request.form.get("password", "").strip()
         confirm  = request.form.get("confirm",  "").strip()
 
-        # Basic validation
         if not mobile or not mobile.isdigit() or len(mobile) < 10:
             flash("Please enter a valid mobile number (at least 10 digits).", "danger")
             return render_template("register.html")
@@ -261,39 +282,35 @@ def register():
             flash("Passwords do not match.", "danger")
             return render_template("register.html")
 
-        # Check if already registered
         existing = User.query.filter_by(mobile=mobile).first()
         if existing and existing.is_verified:
             flash("This mobile number is already registered. Please log in.", "warning")
             return redirect(url_for("login"))
 
-        # Create or reuse unverified user
         if not existing:
-            hashed = generate_password_hash(password)
-            new_user = User(mobile=mobile, password=hashed, is_verified=False)
+            new_user = User(mobile=mobile, password=generate_password_hash(password), is_verified=False)
             db.session.add(new_user)
             db.session.commit()
         else:
-            # Update password in case they are re-registering
-            existing.password   = generate_password_hash(password)
+            existing.password    = generate_password_hash(password)
             existing.is_verified = False
             db.session.commit()
 
-        # Create and store OTP
-        otp        = generate_otp()
-        otp_record = OTPRecord(
-            mobile     = mobile,
-            otp        = otp,
-            expires_at = datetime.utcnow() + timedelta(minutes=10)
-        )
-        db.session.add(otp_record)
+        otp = generate_otp()
+        db.session.add(OTPRecord(
+            mobile=mobile,
+            otp=otp,
+            expires_at=datetime.utcnow() + timedelta(minutes=10)
+        ))
         db.session.commit()
 
-        send_otp_simulation(mobile, otp)
-
-        # Keep mobile in session for the verify step
+        sim_otp = send_otp(mobile, otp)
         session["pending_mobile"] = mobile
-        flash(f"OTP sent to {mobile}. (Check the terminal for development OTP)", "info")
+        if sim_otp:
+            # No SMS gateway configured — show OTP directly in the UI
+            flash(f"[DEV MODE] OTP for {mobile}: {sim_otp}  — Enter this below to verify.", "warning")
+        else:
+            flash(f"OTP sent to your mobile number. Enter it below to verify.", "info")
         return redirect(url_for("verify_otp"))
 
     return render_template("register.html")
@@ -301,7 +318,6 @@ def register():
 
 @app.route("/verify-otp", methods=["GET", "POST"])
 def verify_otp():
-    """Verify the OTP that was sent during registration."""
     mobile = session.get("pending_mobile")
     if not mobile:
         return redirect(url_for("register"))
@@ -309,7 +325,6 @@ def verify_otp():
     if request.method == "POST":
         entered_otp = request.form.get("otp", "").strip()
 
-        # Find the latest unused, unexpired OTP for this mobile
         record = (
             OTPRecord.query
             .filter_by(mobile=mobile, used=False)
@@ -319,14 +334,13 @@ def verify_otp():
         )
 
         if not record:
-            flash("OTP has expired. Please register again to get a new OTP.", "danger")
+            flash("OTP has expired. Please register again.", "danger")
             return redirect(url_for("register"))
 
         if record.otp != entered_otp:
             flash("Incorrect OTP. Please try again.", "danger")
             return render_template("verify_otp.html", mobile=mobile)
 
-        # Mark OTP as used and activate the user
         record.used = True
         user = User.query.filter_by(mobile=mobile).first()
         user.is_verified = True
@@ -342,19 +356,17 @@ def verify_otp():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    """Log in with mobile number and password."""
     if request.method == "POST":
         mobile   = request.form.get("mobile",   "").strip()
         password = request.form.get("password", "").strip()
 
         user = User.query.filter_by(mobile=mobile, is_verified=True).first()
-
         if not user or not check_password_hash(user.password, password):
             flash("Invalid mobile number or password.", "danger")
             return render_template("login.html")
 
         session["user_id"] = user.id
-        flash(f"Welcome back!", "success")
+        flash("Welcome back!", "success")
         return redirect(url_for("dashboard"))
 
     return render_template("login.html")
@@ -373,7 +385,6 @@ def logout():
 
 @app.route("/dashboard")
 def dashboard():
-    """Show the user's uploaded photos and view notifications."""
     guard = login_required_redirect()
     if guard:
         return guard
@@ -381,7 +392,6 @@ def dashboard():
     user   = current_user()
     photos = Photo.query.filter_by(user_id=user.id).order_by(Photo.uploaded_at.desc()).all()
 
-    # Gather view notifications (view logs for this user's photos)
     notifications = (
         db.session.query(ViewLog, Photo)
         .join(Photo, ViewLog.photo_id == Photo.id)
@@ -396,7 +406,6 @@ def dashboard():
 
 @app.route("/upload", methods=["GET", "POST"])
 def upload_photo():
-    """Upload a photo. A share-password and QR code are auto-generated."""
     guard = login_required_redirect()
     if guard:
         return guard
@@ -418,11 +427,14 @@ def upload_photo():
             flash("Only PNG, JPG, JPEG, GIF and WEBP files are allowed.", "danger")
             return render_template("upload.html", user=user)
 
-        # Save the file with a unique name
-        ext            = secure_filename(file.filename).rsplit(".", 1)[1].lower()
-        unique_name    = f"{uuid.uuid4().hex}.{ext}"
-        save_path      = os.path.join(UPLOAD_DIR, unique_name)
-        file.save(save_path)
+        ext         = secure_filename(file.filename).rsplit(".", 1)[1].lower()
+        unique_name = f"{uuid.uuid4().hex}.{ext}"
+        file_content = file.read()
+
+        # Save to disk in local dev; on Vercel we store bytes in the DB
+        if not os.environ.get("VERCEL"):
+            with open(os.path.join(UPLOAD_DIR, unique_name), "wb") as f:
+                f.write(file_content)
 
         share_password = generate_share_password()
         share_token    = generate_share_token()
@@ -433,14 +445,15 @@ def upload_photo():
             original_name = secure_filename(file.filename),
             share_password= share_password,
             share_token   = share_token,
+            file_blob     = file_content,   # stored in DB for Vercel
         )
         db.session.add(photo)
         db.session.flush()   # get photo.id before committing
 
-        # Build the public share URL and generate QR code
-        share_url      = url_for("view_shared_photo", token=share_token, _external=True)
-        qr_filename    = make_qr_code(share_url, photo.id)
+        share_url = url_for("view_shared_photo", token=share_token, _external=True)
+        qr_filename, qr_blob = make_qr_code(share_url, photo.id)
         photo.qr_filename = qr_filename
+        photo.qr_blob     = qr_blob
         db.session.commit()
 
         flash("Photo uploaded successfully!", "success")
@@ -451,7 +464,6 @@ def upload_photo():
 
 @app.route("/photo/<int:photo_id>")
 def photo_detail(photo_id):
-    """Show a single photo with its QR code and share-password to the owner."""
     guard = login_required_redirect()
     if guard:
         return guard
@@ -475,7 +487,6 @@ def photo_detail(photo_id):
 
 @app.route("/photo/<int:photo_id>/delete", methods=["POST"])
 def delete_photo(photo_id):
-    """Delete a photo and all associated files."""
     guard = login_required_redirect()
     if guard:
         return guard
@@ -487,16 +498,15 @@ def delete_photo(photo_id):
         flash("Photo not found.", "danger")
         return redirect(url_for("dashboard"))
 
-    # Remove the image file
-    img_path = os.path.join(UPLOAD_DIR, photo.filename)
-    if os.path.exists(img_path):
-        os.remove(img_path)
-
-    # Remove the QR code file
-    if photo.qr_filename:
-        qr_path = os.path.join(QR_DIR, photo.qr_filename)
-        if os.path.exists(qr_path):
-            os.remove(qr_path)
+    # Remove disk files only in local dev
+    if not os.environ.get("VERCEL"):
+        img_path = os.path.join(UPLOAD_DIR, photo.filename)
+        if os.path.exists(img_path):
+            os.remove(img_path)
+        if photo.qr_filename:
+            qr_path = os.path.join(QR_DIR, photo.qr_filename)
+            if os.path.exists(qr_path):
+                os.remove(qr_path)
 
     ViewLog.query.filter_by(photo_id=photo.id).delete()
     db.session.delete(photo)
@@ -512,18 +522,11 @@ def delete_photo(photo_id):
 
 @app.route("/view/<token>", methods=["GET", "POST"])
 def view_shared_photo(token):
-    """
-    Public route embedded in the QR code.
-    Visitors must enter the share-password to see the photo.
-    If they are logged-in users, their mobile number is recorded.
-    A unique view-ID is generated for every successful view.
-    """
     photo = Photo.query.filter_by(share_token=token).first()
-
     if not photo:
         return render_template("error.html", message="This photo link is invalid or has been removed.")
 
-    viewer = current_user()   # may be None if not logged in
+    viewer = current_user()
 
     if request.method == "POST":
         entered_password = request.form.get("password", "").strip()
@@ -533,16 +536,13 @@ def view_shared_photo(token):
             flash("Incorrect password. Please try again.", "danger")
             return render_template("view_photo.html", token=token, photo=None, need_password=True, viewer=viewer)
 
-        # If the viewer is logged in we already know their mobile
         if viewer:
             viewer_mobile = viewer.mobile
 
-        # If still no mobile, require it
         if not viewer_mobile:
             flash("Please enter your mobile number to view this photo.", "warning")
             return render_template("view_photo.html", token=token, photo=None, need_password=True, viewer=viewer, need_mobile=True)
 
-        # Record the view
         view_id  = generate_view_id()
         view_log = ViewLog(
             photo_id      = photo.id,
@@ -559,15 +559,19 @@ def view_shared_photo(token):
 
         return render_template(
             "view_photo.html",
-            token         = token,
-            photo         = photo,
-            need_password = False,
-            viewer        = viewer,
-            view_id       = view_id,
+            token=token,
+            photo=photo,
+            need_password=False,
+            viewer=viewer,
+            view_id=view_id,
         )
 
     return render_template("view_photo.html", token=token, photo=None, need_password=True, viewer=viewer)
 
+
+# ─────────────────────────────────────────────
+#  Routes — Media serving
+# ─────────────────────────────────────────────
 
 @app.route("/static/uploads/<filename>")
 def serve_upload(filename):
@@ -599,14 +603,12 @@ def serve_qr(filename):
 #  Bootstrap the database and run
 # ─────────────────────────────────────────────
 
-# Run db.create_all() at startup so tables exist on first deploy.
-# This is safe to call repeatedly — it is a no-op if tables already exist.
+# Create tables on startup — safe to run repeatedly, no-op if tables exist.
 try:
     with app.app_context():
         db.create_all()
         print("[DB] Tables verified / created OK")
 except Exception as e:
-    # Print clearly so Vercel function logs expose the root cause
     print(f"CRITICAL: Database initialisation failed: {e}")
 
 if __name__ == "__main__":
