@@ -19,3 +19,5 @@ photoshare/static/analytics/*
 .vercel/
 .env
 .env.*
+
+.vercel
