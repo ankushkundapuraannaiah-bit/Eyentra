@@ -1,53 +1,72 @@
 {% extends "base.html" %}
-{% block title %}{{ photo.original_name }} - Eyentra{% endblock %}
+{% block title %}{{ photo.original_name }} — Eyentra{% endblock %}
 
 {% block content %}
 <div class="photo-detail-header">
-    <a href="{{ url_for('dashboard') }}" class="back-link">Back to dashboard</a>
-    <h1>{{ photo.original_name }}</h1>
-    <p class="photo-meta">Uploaded {{ photo.uploaded_at.strftime('%d %b %Y at %H:%M') }}</p>
+    <a href="{{ url_for('dashboard') }}" class="back-link">← Back to Dashboard</a>
+    <h2>{{ photo.original_name }}</h2>
+    <p class="photo-meta">Uploaded: {{ photo.uploaded_at.strftime('%d %b %Y at %H:%M') }}</p>
 </div>
 
 <div class="photo-detail-grid">
+
+    <!-- Left column: the photo -->
     <div class="detail-photo">
-        <img src="{{ url_for('serve_photo_image', photo_id=photo.id) }}" alt="{{ photo.original_name }}" class="full-photo">
+        <img
+            src="{{ url_for('serve_upload', filename=photo.filename) }}"
+            alt="{{ photo.original_name }}"
+            class="full-photo"
+        >
     </div>
 
-    <aside class="detail-info">
+    <!-- Right column: QR + password -->
+    <div class="detail-info">
+
+        <!-- Share password box -->
         <div class="info-box password-box">
-            <p class="eyebrow">Access key</p>
-            <h2>Share password</h2>
-            <p>Anyone scanning the QR code needs this password before the image opens.</p>
+            <h3>🔑 Share Password</h3>
+            <p>Anyone who scans the QR code must enter this password to view the photo.</p>
             <div class="password-display">
                 <code id="sharePassword">{{ photo.share_password }}</code>
                 <button onclick="copyPassword()" class="btn-small">Copy</button>
             </div>
         </div>
 
+        <!-- QR code box -->
         <div class="info-box qr-box">
-            <p class="eyebrow">Scan route</p>
-            <h2>QR code</h2>
+            <h3>📲 QR Code</h3>
+            <p>Share this QR code image. When scanned, the viewer must enter the password above.</p>
             {% if photo.qr_filename %}
-                <img src="{{ url_for('serve_qr', filename=photo.qr_filename) }}" alt="QR Code" class="qr-image">
-                <a href="{{ url_for('serve_qr', filename=photo.qr_filename) }}" download="qr_{{ photo.original_name }}.png" class="btn btn-outline btn-full">Download QR</a>
+                <img
+                    src="{{ url_for('serve_qr', filename=photo.qr_filename) }}"
+                    alt="QR Code"
+                    class="qr-image"
+                >
+                <br>
+                <a
+                    href="{{ url_for('serve_qr', filename=photo.qr_filename) }}"
+                    download="qr_{{ photo.original_name }}.png"
+                    class="btn btn-outline"
+                    style="margin-top:0.5rem;"
+                >⬇ Download QR Code</a>
             {% else %}
-                <p><em>QR code is being generated.</em></p>
+                <p><em>QR code is being generated…</em></p>
             {% endif %}
         </div>
 
+        <!-- Delete button -->
         <div class="info-box">
-            <form method="POST" action="{{ url_for('delete_photo', photo_id=photo.id) }}" onsubmit="return confirm('Delete this photo permanently?');">
-                <button type="submit" class="btn btn-danger btn-full">Delete Photo</button>
+            <form method="POST" action="{{ url_for('delete_photo', photo_id=photo.id) }}"
+                  onsubmit="return confirm('Delete this photo permanently?');">
+                <button type="submit" class="btn btn-danger btn-full">🗑 Delete This Photo</button>
             </form>
         </div>
-    </aside>
+    </div>
 </div>
 
+<!-- View log table -->
 <section class="section">
-    <div class="section-heading inline">
-        <h2>View history</h2>
-        <span>{{ view_logs|length }} views</span>
-    </div>
+    <h3>👁 View History ({{ view_logs|length }} views)</h3>
     {% if view_logs %}
     <div class="table-wrap">
         <table class="table">
@@ -62,7 +81,13 @@
                 {% for log in view_logs %}
                 <tr>
                     <td><code>{{ log.view_id }}</code></td>
-                    <td>{{ log.viewer_mobile or 'Not provided' }}</td>
+                    <td>
+                        {% if log.viewer_mobile %}
+                            📱 {{ log.viewer_mobile }}
+                        {% else %}
+                            <em>Not provided</em>
+                        {% endif %}
+                    </td>
                     <td>{{ log.viewed_at.strftime('%d %b %Y %H:%M:%S') }}</td>
                 </tr>
                 {% endfor %}
@@ -70,14 +95,16 @@
         </table>
     </div>
     {% else %}
-    <p class="empty-state slim">No one has viewed this photo yet.</p>
+    <p class="empty-state">No one has viewed this photo yet.</p>
     {% endif %}
 </section>
 
 <script>
 function copyPassword() {
     const text = document.getElementById("sharePassword").innerText;
-    navigator.clipboard.writeText(text).then(() => alert("Password copied."));
+    navigator.clipboard.writeText(text).then(() => {
+        alert("Password copied to clipboard!");
+    });
 }
 </script>
 {% endblock %}
