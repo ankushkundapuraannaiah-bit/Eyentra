@@ -271,6 +271,12 @@ def login_required_redirect(endpoint="login"):
 #  Routes — Health check
 # ─────────────────────────────────────────────
 
+@app.route("/extension")
+def extension_guide():
+    user = current_user()
+    return render_template("extension.html", user=user)
+
+
 @app.route("/health")
 def health():
     try:
