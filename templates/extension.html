@@ -1,34 +1,115 @@
 {% extends "base.html" %}
-{% block title %}Browser Extension - Eyentra{% endblock %}
+{% block title %}Chrome Extension — Eyentra{% endblock %}
 
 {% block content %}
-<section class="page-hero compact">
-    <p class="eyebrow">Browser capture</p>
-    <h1>Install the local Eyentra screenshot extension.</h1>
-    <p>
-        Click the extension icon, drag over the visible browser area, and the crop is
-        uploaded to your logged-in Eyentra account with a QR code ready to share.
-    </p>
-</section>
+<div style="max-width:760px; margin:2rem auto;">
 
-<section class="split-panel">
-    <div class="info-box">
-        <h2>Install in Chrome or Edge</h2>
-        <ol class="ordered-list">
-            <li>Keep Eyentra running at <code>http://127.0.0.1:5000</code>.</li>
-            <li>Log in to your Eyentra account in the browser.</li>
-            <li>Open <code>chrome://extensions</code> or <code>edge://extensions</code>.</li>
-            <li>Enable Developer mode.</li>
-            <li>Choose Load unpacked and select <code>photoshare/extension</code>.</li>
-        </ol>
-    </div>
-    <div class="info-box accent-box">
-        <h2>How capture works</h2>
-        <p>
-            The extension uses the browser screenshot API for the current tab, crops only
-            your selected rectangle, then posts the image to Eyentra's Python API.
+    <!-- Hero -->
+    <div style="text-align:center; padding:2rem 1rem 1.5rem;">
+        <div style="font-size:4rem;">🧩</div>
+        <h1 style="color:var(--brand); margin:0.5rem 0;">Eyentra Chrome Extension</h1>
+        <p style="color:var(--muted); font-size:1.1rem; max-width:520px; margin:0 auto 1.5rem;">
+            Share and view photos securely right from your browser — no need to open the app every time.
         </p>
-        <a href="{{ url_for('dashboard') }}" class="btn btn-primary">Open Dashboard</a>
+        <a href="#" class="btn btn-primary" style="font-size:1rem; padding:0.75rem 2rem;"
+           onclick="alert('Extension coming soon! Check back later.'); return false;">
+            ⬇ Download Extension (.crx)
+        </a>
+        <p style="color:var(--muted); font-size:0.82rem; margin-top:0.6rem;">
+            Version 1.0.0 &nbsp;·&nbsp; Chrome 88+ &nbsp;·&nbsp; Free
+        </p>
     </div>
-</section>
+
+    <!-- Features -->
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:1.25rem; margin:1.5rem 0;">
+        <div class="info-box" style="text-align:center;">
+            <div style="font-size:2rem;">📸</div>
+            <h3 style="margin:0.5rem 0 0.25rem;">Quick Upload</h3>
+            <p style="font-size:0.88rem; color:var(--muted);">Upload photos to Eyentra directly from the browser toolbar.</p>
+        </div>
+        <div class="info-box" style="text-align:center;">
+            <div style="font-size:2rem;">📷</div>
+            <h3 style="margin:0.5rem 0 0.25rem;">Scan QR</h3>
+            <p style="font-size:0.88rem; color:var(--muted);">Detect QR codes on any webpage and open the password gate instantly.</p>
+        </div>
+        <div class="info-box" style="text-align:center;">
+            <div style="font-size:2rem;">🔔</div>
+            <h3 style="margin:0.5rem 0 0.25rem;">View Alerts</h3>
+            <p style="font-size:0.88rem; color:var(--muted);">Get notified in your browser when someone views your shared photo.</p>
+        </div>
+    </div>
+
+    <!-- Install instructions -->
+    <div class="info-box">
+        <h2 style="margin-bottom:1rem;">📋 How to Install</h2>
+
+        <div style="display:flex; flex-direction:column; gap:1rem;">
+
+            <div style="display:flex; gap:1rem; align-items:flex-start;">
+                <div style="background:var(--brand); color:#fff; border-radius:50%; width:32px; height:32px;
+                            display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0;">1</div>
+                <div>
+                    <strong>Download the extension file</strong>
+                    <p style="color:var(--muted); font-size:0.9rem; margin:0.25rem 0 0;">
+                        Click the <em>Download Extension</em> button above to get the <code>.crx</code> file.
+                    </p>
+                </div>
+            </div>
+
+            <div style="display:flex; gap:1rem; align-items:flex-start;">
+                <div style="background:var(--brand); color:#fff; border-radius:50%; width:32px; height:32px;
+                            display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0;">2</div>
+                <div>
+                    <strong>Open Chrome Extensions page</strong>
+                    <p style="color:var(--muted); font-size:0.9rem; margin:0.25rem 0 0;">
+                        In Chrome, go to <code>chrome://extensions</code> or click ⋮ → More Tools → Extensions.
+                    </p>
+                </div>
+            </div>
+
+            <div style="display:flex; gap:1rem; align-items:flex-start;">
+                <div style="background:var(--brand); color:#fff; border-radius:50%; width:32px; height:32px;
+                            display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0;">3</div>
+                <div>
+                    <strong>Enable Developer Mode</strong>
+                    <p style="color:var(--muted); font-size:0.9rem; margin:0.25rem 0 0;">
+                        Toggle <em>Developer mode</em> on (top-right of the Extensions page).
+                    </p>
+                </div>
+            </div>
+
+            <div style="display:flex; gap:1rem; align-items:flex-start;">
+                <div style="background:var(--brand); color:#fff; border-radius:50%; width:32px; height:32px;
+                            display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0;">4</div>
+                <div>
+                    <strong>Drag and drop the .crx file</strong>
+                    <p style="color:var(--muted); font-size:0.9rem; margin:0.25rem 0 0;">
+                        Drag the downloaded <code>.crx</code> file onto the Extensions page and click <em>Add Extension</em>.
+                    </p>
+                </div>
+            </div>
+
+            <div style="display:flex; gap:1rem; align-items:flex-start;">
+                <div style="background:var(--success); color:#fff; border-radius:50%; width:32px; height:32px;
+                            display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0;">✓</div>
+                <div>
+                    <strong>You're all set!</strong>
+                    <p style="color:var(--muted); font-size:0.9rem; margin:0.25rem 0 0;">
+                        The Eyentra icon will appear in your Chrome toolbar. Click it and log in with your Eyentra account.
+                    </p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Coming soon note -->
+    <div class="alert alert-info" style="margin-top:1.5rem; text-align:center;">
+        🚧 The extension is currently in development. Download will be available soon.
+        {% if not user %}
+            <a href="{{ url_for('register') }}">Register now</a> to be notified on launch.
+        {% endif %}
+    </div>
+
+</div>
 {% endblock %}
