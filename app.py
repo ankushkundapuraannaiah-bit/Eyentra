@@ -21,6 +21,7 @@ from flask import (
     url_for, flash, session, jsonify, send_from_directory
 )
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import inspect, text
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
@@ -134,6 +135,7 @@ class ViewLog(db.Model):
     viewer_id     = db.Column(db.Integer,    db.ForeignKey("users.id"),  nullable=True)
     view_id       = db.Column(db.String(64), unique=True, nullable=False)
     viewer_mobile = db.Column(db.String(15), nullable=True)
+    viewer_type   = db.Column(db.String(40), nullable=True, default="People")
     viewed_at     = db.Column(db.DateTime,   default=datetime.utcnow)
     notified      = db.Column(db.Boolean,    default=False)
 
@@ -253,6 +255,34 @@ def make_qr_code(share_url, photo_id):
     return qr_filename, qr_blob
 
 
+def create_photo_record(user, original_name, file_content, ext):
+    """Create a photo, store its bytes, and generate the QR code."""
+    safe_original = secure_filename(original_name) or f"capture.{ext}"
+    unique_name = f"{uuid.uuid4().hex}.{ext}"
+
+    if not os.environ.get("VERCEL"):
+        with open(os.path.join(UPLOAD_DIR, unique_name), "wb") as f:
+            f.write(file_content)
+
+    photo = Photo(
+        user_id=user.id,
+        filename=unique_name,
+        original_name=safe_original,
+        share_password=generate_share_password(),
+        share_token=generate_share_token(),
+        file_blob=file_content,
+    )
+    db.session.add(photo)
+    db.session.flush()
+
+    share_url = url_for("view_shared_photo", token=photo.share_token, _external=True)
+    qr_filename, qr_blob = make_qr_code(share_url, photo.id)
+    photo.qr_filename = qr_filename
+    photo.qr_blob = qr_blob
+    db.session.commit()
+    return photo
+
+
 def current_user():
     user_id = session.get("user_id")
     if user_id:
@@ -284,6 +314,22 @@ def health():
         return jsonify({"status": "healthy", "database": "connected"}), 200
     except Exception as e:
         return jsonify({"status": "unhealthy", "error": str(e)}), 500
+
+
+@app.after_request
+def add_extension_cors_headers(response):
+    origin = request.headers.get("Origin", "")
+    allowed_origins = (
+        origin.startswith("chrome-extension://")
+        or origin.startswith("edge-extension://")
+        or origin in {"http://127.0.0.1:5000", "http://localhost:5000"}
+    )
+    if allowed_origins:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    return response
 
 
 # ─────────────────────────────────────────────
@@ -464,39 +510,52 @@ def upload_photo():
             flash("Only PNG, JPG, JPEG, GIF and WEBP files are allowed.", "danger")
             return render_template("upload.html", user=user)
 
-        ext         = secure_filename(file.filename).rsplit(".", 1)[1].lower()
-        unique_name = f"{uuid.uuid4().hex}.{ext}"
+        ext = secure_filename(file.filename).rsplit(".", 1)[1].lower()
         file_content = file.read()
-
-        # Save to disk in local dev; on Vercel we store bytes in the DB
-        if not os.environ.get("VERCEL"):
-            with open(os.path.join(UPLOAD_DIR, unique_name), "wb") as f:
-                f.write(file_content)
-
-        share_password = generate_share_password()
-        share_token    = generate_share_token()
-
-        photo = Photo(
-            user_id       = user.id,
-            filename      = unique_name,
-            original_name = secure_filename(file.filename),
-            share_password= share_password,
-            share_token   = share_token,
-            file_blob     = file_content,   # stored in DB for Vercel
-        )
-        db.session.add(photo)
-        db.session.flush()   # get photo.id before committing
-
-        share_url = url_for("view_shared_photo", token=share_token, _external=True)
-        qr_filename, qr_blob = make_qr_code(share_url, photo.id)
-        photo.qr_filename = qr_filename
-        photo.qr_blob     = qr_blob
-        db.session.commit()
+        photo = create_photo_record(user, file.filename, file_content, ext)
 
         flash("Photo uploaded successfully!", "success")
         return redirect(url_for("photo_detail", photo_id=photo.id))
 
     return render_template("upload.html", user=user)
+
+
+@app.route("/api/extension/upload", methods=["POST", "OPTIONS"])
+def extension_upload():
+    """Receive a cropped browser screenshot from the extension."""
+    if request.method == "OPTIONS":
+        return ("", 204)
+
+    if not session.get("user_id"):
+        return jsonify({
+            "ok": False,
+            "error": "Log in to Eyentra in this browser before using the extension.",
+            "login_url": url_for("login", _external=True),
+        }), 401
+
+    user = current_user()
+    file = request.files.get("capture")
+    if not file or file.filename == "":
+        return jsonify({"ok": False, "error": "No screenshot capture was received."}), 400
+
+    if not allowed_file(file.filename):
+        return jsonify({"ok": False, "error": "Only image captures can be uploaded."}), 400
+
+    file_content = file.read()
+    if not file_content:
+        return jsonify({"ok": False, "error": "The screenshot was empty."}), 400
+
+    ext = secure_filename(file.filename).rsplit(".", 1)[1].lower()
+    capture_name = f"eyentra-capture-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.{ext}"
+    photo = create_photo_record(user, capture_name, file_content, ext)
+
+    return jsonify({
+        "ok": True,
+        "photo_id": photo.id,
+        "detail_url": url_for("photo_detail", photo_id=photo.id, _external=True),
+        "qr_url": url_for("serve_qr", filename=photo.qr_filename, _external=True),
+        "share_password": photo.share_password,
+    })
 
 
 @app.route("/photo/<int:photo_id>")
@@ -568,6 +627,7 @@ def view_shared_photo(token):
     if request.method == "POST":
         entered_password = request.form.get("password", "").strip()
         viewer_mobile    = request.form.get("viewer_mobile", "").strip()
+        viewer_type      = request.form.get("viewer_type", "People").strip() or "People"
 
         if entered_password != photo.share_password:
             flash("Incorrect password. Please try again.", "danger")
@@ -586,6 +646,7 @@ def view_shared_photo(token):
             viewer_id     = viewer.id if viewer else None,
             view_id       = view_id,
             viewer_mobile = viewer_mobile,
+            viewer_type   = viewer_type,
         )
         db.session.add(view_log)
         db.session.commit()
@@ -644,6 +705,10 @@ def serve_qr(filename):
 try:
     with app.app_context():
         db.create_all()
+        columns = {column["name"] for column in inspect(db.engine).get_columns("view_logs")}
+        if "viewer_type" not in columns:
+            db.session.execute(text("ALTER TABLE view_logs ADD COLUMN viewer_type VARCHAR(40) DEFAULT 'People'"))
+            db.session.commit()
         print("[DB] Tables verified / created OK")
 except Exception as e:
     print(f"CRITICAL: Database initialisation failed: {e}")

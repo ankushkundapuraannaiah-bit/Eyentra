@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Eyentra Capture",
   "version": "1.0.0",
-  "description": "Capture a selected browser area and upload it to Eyentra.",
+  "description": "Capture a selected browser area and upload it to Eyentra for QR sharing.",
   "permissions": ["activeTab", "scripting", "tabs"],
   "host_permissions": ["http://127.0.0.1:5000/*", "http://localhost:5000/*"],
   "action": {
@@ -10,5 +10,12 @@
   },
   "background": {
     "service_worker": "service_worker.js"
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
 }
