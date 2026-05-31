@@ -1,18 +1,29 @@
 {% extends "base.html" %}
-{% block title %}Verify OTP - Eyentra{% endblock %}
+{% block title %}Verify OTP — Eyentra{% endblock %}
 
 {% block content %}
 <div class="auth-card">
-    <p class="eyebrow">Final check</p>
     <h2>Verify your mobile</h2>
     <p class="auth-sub">
-        Enter the OTP generated for <strong>{{ mobile }}</strong>. It is valid for 10 minutes.
+        An OTP has been sent to <strong>{{ mobile }}</strong>.
+        It is valid for 10 minutes.
     </p>
 
     <form method="POST" action="{{ url_for('verify_otp') }}">
+
         <div class="form-group">
             <label for="otp">Enter OTP</label>
-            <input type="text" id="otp" name="otp" placeholder="6-digit OTP" maxlength="6" pattern="\d{6}" required autofocus class="otp-input">
+            <input
+                type="text"
+                id="otp"
+                name="otp"
+                placeholder="6-digit OTP"
+                maxlength="6"
+                pattern="\d{6}"
+                required
+                autofocus
+                class="otp-input"
+            >
         </div>
 
         <button type="submit" class="btn btn-primary btn-full">Verify OTP</button>
