@@ -12,6 +12,7 @@
 <nav class="navbar">
     <a href="{{ url_for('index') }}" class="brand">📷 Eyentra</a>
     <div class="nav-links">
+        <a href="{{ url_for('extension_guide') }}">🧩 Extension</a>
         {% if user %}
             <span class="nav-mobile">📱 {{ user.mobile }}</span>
             <a href="{{ url_for('dashboard') }}">Dashboard</a>
