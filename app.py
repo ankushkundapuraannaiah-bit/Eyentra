@@ -165,14 +165,45 @@ def allowed_file(filename):
 
 def send_otp(mobile, otp):
     """
-    Send OTP via Twilio if configured, otherwise simulate.
-    Returns the OTP string if simulating (so caller can flash it to the user),
-    or None if sent via Twilio.
+    Send OTP via Fast2SMS (free, India) if FAST2SMS_API_KEY is set.
+    Falls back to Twilio if TWILIO_* vars are set.
+    Otherwise shows OTP in the UI (dev mode).
+    Returns the OTP string if simulating, None if sent via gateway.
     """
+    import urllib.request, json as _json
+
+    # ── Fast2SMS (free Indian SMS gateway) ──────────────────────────
+    fast2sms_key = os.environ.get("FAST2SMS_API_KEY")
+    if fast2sms_key:
+        try:
+            payload = _json.dumps({
+                "route":    "otp",
+                "variables_values": otp,
+                "numbers":  mobile,
+            }).encode()
+            req = urllib.request.Request(
+                "https://www.fast2sms.com/dev/bulkV2",
+                data=payload,
+                headers={
+                    "authorization": fast2sms_key,
+                    "Content-Type":  "application/json",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                result = _json.loads(resp.read())
+            if result.get("return"):
+                print(f"[SMS] OTP sent to {mobile} via Fast2SMS")
+                return None
+            else:
+                print(f"[SMS] Fast2SMS error: {result} — falling back")
+        except Exception as e:
+            print(f"[SMS] Fast2SMS exception: {e} — falling back")
+
+    # ── Twilio ───────────────────────────────────────────────────────
     twilio_sid   = os.environ.get("TWILIO_ACCOUNT_SID")
     twilio_token = os.environ.get("TWILIO_AUTH_TOKEN")
     twilio_from  = os.environ.get("TWILIO_FROM_NUMBER")
-
     if twilio_sid and twilio_token and twilio_from:
         try:
             from twilio.rest import Client
@@ -180,19 +211,19 @@ def send_otp(mobile, otp):
             client.messages.create(
                 body=f"Your Eyentra OTP is: {otp}. Valid for 10 minutes.",
                 from_=twilio_from,
-                to=f"+{mobile}" if not mobile.startswith("+") else mobile,
+                to=f"+91{mobile}" if not mobile.startswith("+") else mobile,
             )
             print(f"[SMS] OTP sent to {mobile} via Twilio")
             return None
         except Exception as e:
             print(f"[SMS] Twilio error: {e} — falling back to simulation")
 
-    # Simulation — print to terminal and return OTP so UI can display it
+    # ── Dev / simulation mode ────────────────────────────────────────
     print(f"\n{'='*50}")
     masked = f"******{mobile[-4:]}" if len(mobile) > 4 else mobile
     print(f"  [SMS SIMULATION]  To: {masked}   OTP: {otp}")
     print(f"{'='*50}\n")
-    return otp
+    return otp   # caller flashes this to the user
 
 
 def make_qr_code(share_url, photo_id):
