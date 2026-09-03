@@ -1,4 +1,4 @@
-# PhotoShare — Secure Photo Sharing with QR Codes
+# Eyentra — Secure Photo Sharing with QR Codes
 
 A Python + Flask web application that lets users:
 
@@ -12,7 +12,7 @@ A Python + Flask web application that lets users:
 ## Project structure
 
 ```
-photoshare/
+Eyentra/
 ├── app.py                  ← Main Flask application (all routes + models)
 ├── requirements.txt        ← Python dependencies
 ├── photoshare.db           ← SQLite database (auto-created on first run)
